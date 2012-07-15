@@ -191,7 +191,7 @@ def node_tree_to_dot(node_tree):
     template = Template(_node_tree_dot_template_str)
     with closing(StringIO.StringIO()) as sio:
         for node_path, node in node_tree:
-                print >> sio, '%s [ label=<<table border="0"><tr><td>%s:</td><td>%s</td></tr></table>> ];' % (
+                print >> sio, '%s [ label=<<table border="0"><tr><td><b>[%s]</b>:</td><td><i>%s</i></td></tr></table>> ];' % (
                         node_tree._node_to_id_map[node],
                                 node_tree._node_to_id_map[node], node.item)
                 print >> sio, '    ' * (len(node_path) - 1),
@@ -240,3 +240,11 @@ if __name__ == '__main__':
     sub_tree = node_tree[15].get_tree()
     node_tree.insert_after(node_tree[14], sub_tree[0])
     path('02_insert_15_after_14.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    node_tree.remove(node_tree[12])
+    path('03_remove_12.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    sibling = node_tree[9]
+    sub_tree = node_tree.remove(node_tree[5])
+    node_tree.insert_after(sibling, sub_tree[0])
+    path('04_remove_5_insert_after_9.dot').write_bytes(node_tree_to_dot(node_tree))
