@@ -3,51 +3,24 @@
 from pprint import pprint
 import cPickle as pickle
 
-import gobject
-from pygtkhelpers.utils import gsignal
 
-
-class Node(gobject.GObject):
-    gsignal('created')
-    gsignal('node-appended', object)
-    gsignal('node-inserted', object)
-    gsignal('node-removed', object)
-
+class Node(object):
     def __init__(self, item=None):
-        self.__gobject_init__()
         self.parent = None
         self.item = item
         self.children = []
 
-    def on_grandchild_appended(self, parent, child):
-        self.emit('node-appended', child)
-
-    def on_grandchild_inserted(self, parent, child):
-        self.emit('node-inserted', child)
-
     def insert_after(self, node):
         node.parent = self.parent
-        node.connect('node-appended', node.parent.on_grandchild_appended)
-        node.connect('node-inserted', node.parent.on_grandchild_inserted)
-        node.connect('node-removed', node.parent.on_grandchild_removed)
         position = node.parent.index(self)
         node.parent.children.insert(position + 1, node)
-        self.emit('node-inserted', node)
 
     def append_node(self, child):
         child.parent = self
-        child.connect('node-appended', self.on_grandchild_appended)
-        child.connect('node-inserted', self.on_grandchild_inserted)
-        child.connect('node-removed', self.on_grandchild_removed)
         self.children.append(child)
-        self.emit('node-appended', child)
-
-    def on_grandchild_removed(self, parent, child):
-        self.emit('node-removed', child)
 
     def remove_node(self, node):
         self.children.remove(node)
-        self.emit('node-removed', node)
 
     def index(self, value):
         return self.children.index(value)
@@ -66,15 +39,18 @@ class Node(gobject.GObject):
 class NodeTree(object):
     def __init__(self):
         self.root = Node(None)
-        self.root.connect('node-appended', self.on_node_appended)
-        self.root.connect('node-inserted', self.on_node_appended)
-        self.root.connect('node-removed', self.on_node_removed)
+        #self.root.connect('node-appended', self.on_node_appended)
+        #self.root.connect('node-inserted', self.on_node_appended)
+        #self.root.connect('node-removed', self.on_node_removed)
         self._reset_index()
 
     def _reset_index(self):
         self._node_to_id_map = {}
         self._id_to_path_map = []
         self._node_to_path_map = {}
+
+    def on_node_inserted(self, *args, **kwargs):
+        self._reindex()
 
     def on_node_appended(self, *args, **kwargs):
         self._reindex()
@@ -136,21 +112,25 @@ class NodeTree(object):
             self.insert_after(self[sibling_path], node)
         else:
             self.append_child(self.root, node)
+        self.on_node_appended(node)
 
     def append_child(self, parent, node):
         parent.append_node(node)
 
     def insert_after(self, sibling, node):
         sibling.insert_after(node)
+        sibling_path = self._node_to_path_map[sibling]
+        insert_path = sibling_path[:-1] + tuple([sibling_path[-1] + 1])
+        self.on_node_inserted(insert_path, node)
 
     def remove(self, node):
+        node_path = self._node_to_path_map[node]
         node.parent.remove_node(node)
         node_tree = NodeTree()
-        node_tree.append_node(node_tree.root, node)
+        node_tree.append_child(node_tree.root, node)
+        node_tree._reindex()
+        self.on_node_removed(node_path, node_tree)
         return node_tree
-
-    def __getstate__(self):
-        import pudb; pudb.set_trace()
 
 
 if __name__ == '__main__':
@@ -174,6 +154,7 @@ if __name__ == '__main__':
     for i in range(2):
         child = Node(count)
         node_tree.append_child(parent, child)
+        count += 1
         for i in range(2):
             node_tree.append_child(child, Node(count))
             count += 1
