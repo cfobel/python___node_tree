@@ -23,11 +23,13 @@ class Node(object):
         node.parent = self.parent
         position = node.parent.index(self)
         node.parent.children.insert(position, node)
+        return position
 
     def insert_after(self, node):
         node.parent = self.parent
         position = node.parent.index(self)
         node.parent.children.insert(position + 1, node)
+        return position + 1
 
     def append_node(self, child):
         child.parent = self
@@ -74,6 +76,29 @@ class NodeTree(object):
                 children = [children]
             for c in children:
                 self.append_node(c)
+
+    def ungroup(self, nodes):
+        if not nodes:
+            return
+        print nodes
+        for root in nodes:
+            print len(root)
+            removed = [self.remove(c)[0] for c in root[::-1]]
+            #removed = [self.remove(c)[0] for c in root.children]
+            print len(removed)
+            print [r.item for r in removed]
+            for node in removed:
+                self.insert_after(root, node)
+
+    def group(self, nodes):
+        if not nodes:
+            return
+        ids, nodes = zip(*sorted([(self._node_to_id_map[node], node)
+                for node in nodes]))
+        root = nodes[0]
+        removed = [self.remove(node)[0] for node in nodes[1:]]
+        for node in removed:
+            self.append_child(root, node)
 
     @property
     def max_depth(self):
@@ -154,19 +179,16 @@ class NodeTree(object):
         parent.append_node(node)
         self.on_node_appended(node)
 
-    def _insert_relative(self, insert_path_func, sibling, node):
-        sibling.insert_after(node)
+    def _insert_relative(self, insert_func, sibling, node):
+        position = insert_func(sibling, node)
         sibling_path = self._node_to_path_map[sibling]
-        self.on_node_inserted(insert_path_func(sibling_path), node)
-
-    def _insert_after_path(self, node_path):
-        return node_path[:-1] + tuple([node_path[-1] + 1])
+        self.on_node_inserted(sibling_path[:-1] + (position, ), node)
 
     def insert_before(self, sibling, node):
-        self._insert_relative(lambda x: x, sibling, node)
+        self._insert_relative(Node.insert_before, sibling, node)
 
     def insert_after(self, sibling, node):
-        self._insert_relative(self._insert_after_path, sibling, node)
+        self._insert_relative(Node.insert_after, sibling, node)
 
     def remove(self, node):
         node_path = self._node_to_path_map[node]
@@ -248,3 +270,19 @@ if __name__ == '__main__':
     sub_tree = node_tree.remove(node_tree[5])
     node_tree.insert_after(sibling, sub_tree[0])
     path('04_remove_5_insert_after_9.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    other_tree = NodeTree([node.copy() for node in [node_tree[1], node_tree[5]]])
+    node_tree.insert_before(node_tree[0], other_tree[0])
+    path('05_group_5_9_insert_before_0.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    node_tree.group([node_tree[i] for i in [0, 4, 5]])
+    path('06_group_0_4_5.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    node_tree.ungroup([node_tree[i] for i in [0]])
+    path('07_ungroup_0.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    node_tree.group([node_tree[i] for i in [0, 1, 2, 4, 5]])
+    path('08_group_0_1_2_4_5.dot').write_bytes(node_tree_to_dot(node_tree))
+
+    node_tree.ungroup([node_tree[i] for i in [0, 16]])
+    path('09_ungroup_0_16.dot').write_bytes(node_tree_to_dot(node_tree))
