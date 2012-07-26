@@ -13,58 +13,10 @@ from jinja2 import Template
 from path import path
 
 
-class Node(object):
-    def __init__(self, item=None):
-        self.parent = None
-        self.item = item
-        self.children = []
-
-    def insert_before(self, node):
-        node.parent = self.parent
-        position = node.parent.index(self)
-        node.parent.children.insert(position, node)
-        return position
-
-    def insert_after(self, node):
-        node.parent = self.parent
-        position = node.parent.index(self)
-        node.parent.children.insert(position + 1, node)
-        return position + 1
-
-    def append_node(self, child):
-        child.parent = self
-        self.children.append(child)
-
-    def remove_node(self, node):
-        self.children.remove(node)
-        node.parent = None
-
-    def index(self, value):
-        return self.children.index(value)
-
-    def __len__(self):
-        return len(self.children)
-
-    def __getitem__(self, index):
-        return self.children[index]
-
-    def __iter__(self):
-        for child in self.children:
-            yield child
-
-    def get_tree(self):
-        return NodeTree(self.copy())
-
-    def copy(self):
-        new_node = Node(item=self.item)
-        new_node.children = [child.copy() for child in self.children]
-        for child in new_node:
-            child.parent = new_node
-        return new_node
-
-
 class NodeTree(object):
     def __init__(self, children=None):
+        self._ungroup_in_progress = False
+        self._group_in_progress = False
         self.root = Node(None)
         self._reset_index()
         if children is not None:
@@ -81,24 +33,36 @@ class NodeTree(object):
         if not nodes:
             return
         print nodes
-        for root in nodes:
-            print len(root)
-            removed = [self.remove(c)[0] for c in root[::-1]]
-            #removed = [self.remove(c)[0] for c in root.children]
-            print len(removed)
-            print [r.item for r in removed]
-            for node in removed:
-                self.insert_after(root, node)
+        self._ungroup_in_progress = True
+        try:
+            root_paths = [self._node_to_path_map[n] for n in nodes]
+            print 'root_paths:', root_paths
+            for root in nodes:
+                print len(root)
+                removed = [self.remove(c)[0] for c in root[::-1]]
+                #removed = [self.remove(c)[0] for c in root.children]
+                print len(removed)
+                print [r.item for r in removed]
+                for node in removed:
+                    self.insert_after(root, node)
+            self._on_ungrouped(root_paths)
+        finally:
+            self._ungroup_in_progress = False
 
     def group(self, nodes):
         if not nodes:
             return
-        ids, nodes = zip(*sorted([(self._node_to_id_map[node], node)
-                for node in nodes]))
-        root = nodes[0]
-        removed = [self.remove(node)[0] for node in nodes[1:]]
-        for node in removed:
-            self.append_child(root, node)
+        self._group_in_progress = True
+        try:
+            node_paths, nodes = zip(*sorted([(self._node_to_path_map[
+                    node], node) for node in nodes]))
+            root = nodes[0]
+            removed = [self.remove(node)[0] for node in nodes[1:]]
+            for node in removed:
+                self.append_child(root, node)
+            self._on_grouped(node_paths[0], node_paths[1:])
+        finally:
+            self._group_in_progress = False
 
     @property
     def max_depth(self):
@@ -110,14 +74,43 @@ class NodeTree(object):
         self._id_to_path_map = []
         self._node_to_path_map = {}
 
+    def on_ungrouped(self, root_paths):
+        pass
+
+    def on_grouped(self, parent_path, children_paths):
+        pass
+
     def on_node_inserted(self, *args, **kwargs):
-        self._reindex()
+        pass
 
     def on_node_appended(self, *args, **kwargs):
-        self._reindex()
+        pass
 
     def on_node_removed(self, *args, **kwargs):
+        pass
+
+    def _on_ungrouped(self, root_paths):
         self._reindex()
+        self.on_ungrouped(root_paths)
+
+    def _on_grouped(self, parent_path, children_paths):
+        self._reindex()
+        self.on_grouped(parent_path, children_paths)
+
+    def _on_node_inserted(self, *args, **kwargs):
+        self._reindex()
+        if not self._ungroup_in_progress and not self._group_in_progress:
+            self.on_node_inserted(*args, **kwargs)
+
+    def _on_node_appended(self, *args, **kwargs):
+        self._reindex()
+        if not self._ungroup_in_progress and not self._group_in_progress:
+            self.on_node_appended(*args, **kwargs)
+
+    def _on_node_removed(self, *args, **kwargs):
+        self._reindex()
+        if not self._ungroup_in_progress and not self._group_in_progress:
+            self.on_node_removed(*args, **kwargs)
 
     def _reindex(self):
         self._reset_index()
@@ -177,12 +170,13 @@ class NodeTree(object):
 
     def append_child(self, parent, node):
         parent.append_node(node)
-        self.on_node_appended(node)
+        self._on_node_appended(node)
 
     def _insert_relative(self, insert_func, sibling, node):
         position = insert_func(sibling, node)
         sibling_path = self._node_to_path_map[sibling]
-        self.on_node_inserted(sibling_path[:-1] + (position, ), node)
+        print '[_insert_relative] sibling_path=%s position=%s' % (sibling_path, position)
+        self._on_node_inserted(sibling_path[:-1] + (position, ), node)
 
     def insert_before(self, sibling, node):
         self._insert_relative(Node.insert_before, sibling, node)
@@ -190,15 +184,90 @@ class NodeTree(object):
     def insert_after(self, sibling, node):
         self._insert_relative(Node.insert_after, sibling, node)
 
+    def insert(self, node_path, node):
+        try:
+            sibling = self[node_path]
+            self.insert_before(sibling, node)
+        except IndexError:
+            try:
+                parent_path = node_path[:-1]
+            except TypeError:
+                parent_path = None
+            if parent_path:
+                parent = self[parent_path]
+            else:
+                parent = self.root
+            try:
+                sibling_path = node_path[:-1] + (node_path[-1] - 1, )
+                sibling = self[sibling_path]
+                self.insert_after(sibling, node)
+            except IndexError:
+                self.append_child(parent, node)
+
     def remove(self, node):
         node_path = self._node_to_path_map[node]
         node.parent.remove_node(node)
         node_tree = node.get_tree()
-        self.on_node_removed(node_path, node_tree)
+        self._on_node_removed(node_path, node_tree)
         return node_tree
 
     def copy(self):
         return copy.deepcopy(self)
+
+
+class Node(object):
+    tree_class = NodeTree
+
+    def __init__(self, item=None):
+        self.parent = None
+        self.item = item
+        self.children = []
+
+    def insert_before(self, node):
+        node.parent = self.parent
+        position = node.parent.index(self)
+        node.parent.children.insert(position, node)
+        return position
+
+    def insert_after(self, node):
+        node.parent = self.parent
+        position = node.parent.index(self)
+        node.parent.children.insert(position + 1, node)
+        return position + 1
+
+    def append_node(self, child):
+        child.parent = self
+        self.children.append(child)
+
+    def remove_node(self, node):
+        self.children.remove(node)
+        node.parent = None
+
+    def index(self, value):
+        return self.children.index(value)
+
+    def __len__(self):
+        return len(self.children)
+
+    def __getitem__(self, index):
+        return self.children[index]
+
+    def __iter__(self):
+        for child in self.children:
+            yield child
+
+    def get_tree(self):
+        return self.tree_class(self.copy())
+
+    def _copy_single(self):
+        return self.__class__(item=self.item)
+
+    def copy(self):
+        new_node = self._copy_single()
+        new_node.children = [child.copy() for child in self.children]
+        for child in new_node:
+            child.parent = new_node
+        return new_node
 
 
 _node_tree_dot_template_str = '''\
@@ -273,7 +342,7 @@ if __name__ == '__main__':
 
     other_tree = NodeTree([node.copy() for node in [node_tree[1], node_tree[5]]])
     node_tree.insert_before(node_tree[0], other_tree[0])
-    path('05_group_5_9_insert_before_0.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('05_copy_1_5_insert_before_0.dot').write_bytes(node_tree_to_dot(node_tree))
 
     node_tree.group([node_tree[i] for i in [0, 4, 5]])
     path('06_group_0_4_5.dot').write_bytes(node_tree_to_dot(node_tree))
