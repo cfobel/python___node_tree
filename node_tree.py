@@ -4,6 +4,7 @@ try:
     import cStringIO as StringIO
 except ImportError:
     import StringIO
+import logging
 from contextlib import closing
 import copy
 from pprint import pprint
@@ -32,17 +33,12 @@ class NodeTree(object):
     def ungroup(self, nodes):
         if not nodes:
             return
-        print nodes
         self._ungroup_in_progress = True
         try:
             root_paths = [self._node_to_path_map[n] for n in nodes]
-            print 'root_paths:', root_paths
             for root in nodes:
-                print len(root)
                 removed = [self.remove(c)[0] for c in root[::-1]]
                 #removed = [self.remove(c)[0] for c in root.children]
-                print len(removed)
-                print [r.item for r in removed]
                 for node in removed:
                     self.insert_after(root, node)
             self._on_ungrouped(root_paths)
@@ -75,19 +71,22 @@ class NodeTree(object):
         self._node_to_path_map = {}
 
     def on_ungrouped(self, root_paths):
-        pass
+        logging.debug('[on_ungrouped] root_paths=%s' % root_paths)
 
     def on_grouped(self, parent_path, children_paths):
-        pass
+        logging.debug('[on_grouped] parent_path=%s children_paths=%s' % (
+                parent_path, children_paths))
 
     def on_node_inserted(self, *args, **kwargs):
-        pass
+        logging.debug('[on_node_inserted] args=%s kwargs=%s' % (args, kwargs))
 
     def on_node_appended(self, *args, **kwargs):
-        pass
+        logging.debug('[on_node_appended] args=%s kwargs=%s group=%s ungroup=%s' % (
+                args, kwargs, self._group_in_progress,
+                        self._ungroup_in_progress))
 
     def on_node_removed(self, *args, **kwargs):
-        pass
+        logging.debug('[on_node_removed] args=%s kwargs=%s' % (args, kwargs))
 
     def _on_ungrouped(self, root_paths):
         self._reindex()
@@ -175,7 +174,6 @@ class NodeTree(object):
     def _insert_relative(self, insert_func, sibling, node):
         position = insert_func(sibling, node)
         sibling_path = self._node_to_path_map[sibling]
-        print '[_insert_relative] sibling_path=%s position=%s' % (sibling_path, position)
         self._on_node_inserted(sibling_path[:-1] + (position, ), node)
 
     def insert_before(self, sibling, node):
