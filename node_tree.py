@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from pprint import pprint
 from contextlib import closing
 try:
     import cStringIO as StringIO
@@ -161,7 +162,57 @@ class NodeTree(object):
 
         Each iteration yields the following tuple:
 
-            (linear index, path tuple, `Node` reference)
+            (linear index, path tuple [relative to `node`], `Node` reference)
+
+        For example, consider the following `NodeTree`:
+
+        >>> node_tree = NodeTree()
+        >>> for letter in 'ABCDE': node_tree.append_node(Node(letter))#doctest: +ELLIPSIS
+        <...>
+        >>> node_tree.append_child(node_tree[2], Node('C.A'))
+        >>> node_tree.append_child(node_tree[2, 0], Node('C.A.A'))
+        >>> node_tree.append_child(node_tree[2, 0], Node('C.A.B'))
+        >>> node_tree.append_child(node_tree[2], Node('C.B'))
+        >>> print node_tree  #doctest: +NORMALIZE_WHITESPACE
+        [ 0] (0,) Node(item=A)
+        [ 1] (1,) Node(item=B)
+        [ 2] (2,) Node(item=C)
+        [ 3] (2, 0) Node(item=C.A)
+        [ 4] (2, 0, 0) Node(item=C.A.A)
+        [ 5] (2, 0, 1) Node(item=C.A.B)
+        [ 6] (2, 1) Node(item=C.B)
+        [ 7] (3,) Node(item=D)
+        [ 8] (4,) Node(item=E)
+
+        Now, let's print the list of tuples returned by the `_iter_children`
+        with no `node` specified:
+
+        >>> pprint(list(node_tree._iter_children())) #doctest: +ELLIPSIS
+        [(0, (0,), <...Node object at 0x...>),
+         (1, (1,), <...Node object at 0x...>),
+         (2, (2,), <...Node object at 0x...>),
+         (3, (2, 0), <...Node object at 0x...>),
+         (4, (2, 0, 0), <...Node object at 0x...>),
+         (5, (2, 0, 1), <...Node object at 0x...>),
+         (6, (2, 1), <...Node object at 0x...>),
+         (7, (3,), <...Node object at 0x...>),
+         (8, (4,), <...Node object at 0x...>)]
+
+        Here we see that the `Node` instances are visited in depth-first
+        pre-visit order.
+
+        Now, let's print the list of tuples returned by the `_iter_children`
+        relative to `node`:
+
+        >>> pprint(list(node_tree._iter_children(node_tree[2, 0]))) #doctest: +ELLIPSIS
+        [(9, (), <...Node object at 0x...>),
+         (10, (0,), <...Node object at 0x...>),
+         (11, (1,), <...Node object at 0x...>)]
+
+        Here we see that the `Node` instances in the sub-tree rooted at `node`
+        are visited in depth-first pre-visit order.  Note that although the
+        path tuple is relative to `node`, the linear index is relative to the
+        root of the main tree.
         '''
         if node is None:
             node = self.root
@@ -206,6 +257,56 @@ class NodeTree(object):
         del self._counts[self._depth + 1:]
 
     def _get_node(self, parent, node_path):
+        '''
+        Get `Node` at the path `node_path` relative to the `Node` `parent`.
+
+        For example, consider the following `NodeTree`:
+
+        >>> node_tree = NodeTree()
+        >>> for letter in 'ABCDE': node_tree.append_node(Node(letter))#doctest: +ELLIPSIS
+        <...>
+        >>> node_tree.append_child(node_tree[2], Node('C.A'))
+        >>> node_tree.append_child(node_tree[2, 0], Node('C.A.A'))
+        >>> node_tree.append_child(node_tree[2, 0], Node('C.A.B'))
+        >>> node_tree.append_child(node_tree[2], Node('C.B'))
+        >>> print node_tree  #doctest: +NORMALIZE_WHITESPACE
+        [ 0] (0,) Node(item=A)
+        [ 1] (1,) Node(item=B)
+        [ 2] (2,) Node(item=C)
+        [ 3] (2, 0) Node(item=C.A)
+        [ 4] (2, 0, 0) Node(item=C.A.A)
+        [ 5] (2, 0, 1) Node(item=C.A.B)
+        [ 6] (2, 1) Node(item=C.B)
+        [ 7] (3,) Node(item=D)
+        [ 8] (4,) Node(item=E)
+
+        Now, let's consider node `[2, 0]`, with `item='C.A'`.  Using this
+        `Node` as a point of reference, let's look up the `Node` at the
+        relative path tuple (0, ):
+
+        >>> print node_tree._get_node(node_tree[2, 0], (0, ))
+        Node(item=C.A.A)
+
+        Here we can see that the first child of `Node [2, 0]` is returned, as
+        expected.
+
+        Now, let's look up the `Node` at relative path (1, ):
+
+        >>> print node_tree._get_node(node_tree[2, 0], (1, ))
+        Node(item=C.A.B)
+
+        Here we can see that the second child of `Node [2, 0]` is returned, as
+        expected.
+
+        And finally, let's look up the `Node` at relative path that is one
+        level deeper, (0, 1, ):
+
+        >>> print node_tree._get_node(node_tree[2], (0, 1, ))
+        Node(item=C.A.B)
+
+        Here we can see that the second grandchild of `Node [2, 0]` is returned,
+        as expected.
+        '''
         if len(node_path) > 1:
             return self._get_node(parent[node_path[0]],
                     node_path[1:])
@@ -213,15 +314,29 @@ class NodeTree(object):
             return parent[node_path[0]]
 
     def __iter__(self):
+        '''
+        Iterate through each node in the tree in flattened order (i.e.,
+        depth-first).
+
+        Each iteration yields the following tuple:
+            (path tuple, `Node` reference)
+        '''
         for i in range(len(self)):
             yield self._id_to_path_map[i], self[i]
 
     def __getitem__(self, key):
+        '''
+        Return an item corresponding to the provided `key`.
+
+        `key` can either be a path tuple, or a linear index (i.e., the index of
+        the `Node` as if the tree was flattened).
+        '''
         try:
             len(key)
-            # The key has a length
+            # The key has a length, so interpret it as a path tuple.
             return self._get_node(self.root, key)
         except TypeError:
+            # The key does have a length, so interpret it as a linear index.
             return self._get_node(self.root, self._id_to_path_map[key])
 
     def __len__(self):
