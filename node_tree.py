@@ -154,22 +154,54 @@ class NodeTree(object):
             self._node_to_id_map[node] = index
 
     def _iter_children(self, node=None):
+        '''
+        Iterate through the `Node` instances in the tree in depth-first
+        pre-visit order, starting at the specified `Node`.  If no `Node` is
+        given, start at the first `Node` in the tree.
+
+        Each iteration yields the following tuple:
+
+            (linear index, path tuple, `Node` reference)
+        '''
         if node is None:
             node = self.root
             self._counts = [0]
             self._depth = -1
             self._index = 0
         if node != self.root:
+            # If we're starting somewhere other than the root of the tree,
+            # start the traversal with the specified `Node`.  Otherwise, we
+            # just carry on with the top-level `Node` instances of the tree.
             yield self._index, tuple(self._counts[:self._depth + 1]), node
             self._index += 1
+
+        # We increase the depth level since we are going to traverse the
+        # children of `node`, which are one level deeper.
         self._depth += 1
+
+        # Keep track of the maximum depth reached for fast access later.
         self._max_depth = max(self._max_depth, self._depth)
+
+        # We need to keep track of the path tuple for the current `Node`.  We
+        # do this by keeping a running sum of the number of children in the
+        # current sub-tree level.  The sum for each level is stored in a list
+        # at the index corresponding to the tree level.  This list is called
+        # `_counts`.
+        # Here, we add a zero to the `_counts` list if this is the first `Node`
+        # we're visiting at this sub-tree level.
         while len(self._counts) < self._depth + 1:
             self._counts.append(0)
+
+        # Perform depth-first traversal by calling `_iter_children()`
+        # recursively on the children.
         for child in node:
             for child_node in self._iter_children(child):
                 yield child_node
+            # We need to increment the `Node` count for the current sub-tree
+            # level.
             self._counts[self._depth] += 1
+        # The depth decreases by one here since we've processed all children of
+        # `node`.
         self._depth -= 1
         del self._counts[self._depth + 1:]
 
