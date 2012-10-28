@@ -53,8 +53,9 @@ class NodeTree(object):
             node_paths, nodes = zip(*sorted([(self._node_to_path_map[
                     node], node) for node in nodes]))
             root = nodes[0]
-            removed = [self.remove(node)[0] for node in nodes[1:]]
-            for node in removed:
+            removed = [self.remove(node)[0]
+                    for node in nodes[len(nodes) - 1:0:-1]]
+            for node in removed[::-1]:
                 self.append_child(root, node)
             self._on_grouped(node_paths[0], node_paths[1:])
         finally:
@@ -220,6 +221,9 @@ class Node(object):
         self.parent = None
         self.item = item
         self.children = []
+
+    def __str__(self):
+        return 'Node(item=%s)' % self.item
 
     def insert_before(self, node):
         node.parent = self.parent
