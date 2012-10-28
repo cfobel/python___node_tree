@@ -220,6 +220,22 @@ class NodeTree(object):
 
 
 class Node(object):
+    '''
+    This class implements the atomic element contained in a NodeTree.  Each
+    Node may contain a list of zero or more child nodes.  Child nodes can be
+    added using any of the following methods:
+        a) insert_before(node)
+            Insert the provided node as a sibling before `self` in the list of
+            children for `self`.parent
+        b) insert_after(node)
+            Insert the provided node as a sibling after `self` in the list of
+            children for `self`.parent
+        c) append_node(child)
+            Insert the provided node at the end of the list of children for
+            `self`
+        d) remove_node(node)
+            Remove specified node from the children of `self`.
+    '''
     tree_class = NodeTree
 
     def __init__(self, item=None):
@@ -231,22 +247,36 @@ class Node(object):
         return 'Node(item=%s)' % self.item
 
     def insert_before(self, node):
+        '''
+        Insert the provided node as a sibling before `self` in the list of
+        children for `self`.parent
+        '''
         node.parent = self.parent
         position = node.parent.index(self)
         node.parent.children.insert(position, node)
         return position
 
     def insert_after(self, node):
+        '''
+        Insert the provided node as a sibling after `self` in the list of
+        children for `self`.parent
+        '''
         node.parent = self.parent
         position = node.parent.index(self)
         node.parent.children.insert(position + 1, node)
         return position + 1
 
     def append_node(self, child):
+        '''
+        Insert the provided node at the end of the list of children for `self`
+        '''
         child.parent = self
         self.children.append(child)
 
     def remove_node(self, node):
+        '''
+        Remove specified node from the children of `self`.
+        '''
         self.children.remove(node)
         node.parent = None
 
@@ -267,9 +297,19 @@ class Node(object):
         return self.tree_class(self.copy())
 
     def _copy_single(self):
+        '''
+        Return a shallow copy of `self` (no children are set).
+        '''
         return self.__class__(item=self.item)
 
     def copy(self):
+        '''
+        Return a deep copy of `self`, recursively copying all all ancestors of
+        `self`.  Note that although all `Node` instances are copied by value
+        here, all `Node.item` values are only copied by reference (which makes
+        sense, since you might want to reference the same object in multiple
+        tree structures).
+        '''
         new_node = self._copy_single()
         new_node.children = [child.copy() for child in self.children]
         for child in new_node:
