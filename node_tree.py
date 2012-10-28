@@ -13,6 +13,42 @@ from path import path
 
 
 class NodeTree(object):
+    r'''
+    An instance of this class represents a flat top-level tree structure.
+    e.g.,
+
+        A      B      C     D       Top level can have more than one `Node`
+       / \    / \    / \     \
+      E   F  G   H  I   J     K
+     /          / \
+    L          M   N
+
+    Nodes can be inserted into the tree using the following methods:
+        append_node(node/node_tree)
+            Insert the provided `Node` at the end of the list of top level
+            `Node` instances.  Note that this method also accepts a `NodeTree`
+            instance that has single top-level `Node`.  This is convenient when
+            using other methods that return a `NodeTree`, such as
+            `NodeTree.remove()`.
+
+        append_child(parent, node)
+            Append the provided `Node` to the end of the list of children for
+            `parent`.
+
+        insert_before(sibling, node)
+            Insert the provided `Node` as a sibling before `sibling`.
+
+        insert_after(sibling, node)
+            Insert the provided `Node` as a sibling after `sibling`.
+
+        insert(node_path, node)
+            Insert the provided `Node` before the provided `node_path` tuple.
+            If there is currently no node at the path `node_path`, the `Node` will be inserted at the last position at the
+            deepest level of the `node_path`.
+
+
+    Nodes can be grouped and ungrouped using the methods with corresponding names.
+    '''
     def __init__(self, children=None):
         self._ungroup_in_progress = False
         self._group_in_progress = False
@@ -35,15 +71,35 @@ class NodeTree(object):
             msg = s.getvalue()
         return msg
 
+    def single_root_as_node(self):
+        '''
+        If this `NodeTree` has exactly one top-level `Node`, return a copy of
+        that `Node`.  Otherwise, raise a `ValueError`.
+        '''
+        if len(self.root.children) != 1:
+            raise ValueError, 'NodeTree instances must have exactly one '\
+                    'top-level child to be casted to a Node'
+        return self.root.children[0].copy()
+
     def ungroup(self, nodes):
+        '''
+        Ungroup the specified list of `Node` instances.  This means that all
+        `Node` instances in the provided list, except for the first, will be
+        removed from the `NodeTree` and re-inserted in order as siblings after
+        the first `Node` in the list.
+        '''
         if not nodes:
             return
         self._ungroup_in_progress = True
         try:
             root_paths = [self._node_to_path_map[n] for n in nodes]
             for root in nodes:
-                removed = [self.remove(c)[0] for c in root[::-1]]
-                #removed = [self.remove(c)[0] for c in root.children]
+                # if the parent is not set, then this node was already
+                # removed by removing a parent (or grandparent, etc.)
+                if root.parent is None:
+                    print 'root is None'
+                    continue
+                removed = [self.remove(c)[0] for c in root[::-1] if c.parent]
                 for node in removed:
                     self.insert_after(root, node)
             self._on_ungrouped(root_paths)
@@ -51,6 +107,11 @@ class NodeTree(object):
             self._ungroup_in_progress = False
 
     def group(self, nodes):
+        '''
+        Group the specified list of `Node` instances together.  This means that
+        the first `Node` in the list becomes the root `Node` for the group, and
+        the rest of the `Node` instances are appended as children to the root.
+        '''
         if not nodes:
             return
         self._group_in_progress = True
@@ -76,48 +137,16 @@ class NodeTree(object):
         self._id_to_path_map = []
         self._node_to_path_map = {}
 
-    def on_ungrouped(self, root_paths):
-        logging.debug('[on_ungrouped] root_paths=%s' % root_paths)
-
-    def on_grouped(self, parent_path, children_paths):
-        logging.debug('[on_grouped] parent_path=%s children_paths=%s' % (
-                parent_path, children_paths))
-
-    def on_node_inserted(self, *args, **kwargs):
-        logging.debug('[on_node_inserted] args=%s kwargs=%s' % (args, kwargs))
-
-    def on_node_appended(self, *args, **kwargs):
-        logging.debug('[on_node_appended] args=%s kwargs=%s group=%s ungroup=%s' % (
-                args, kwargs, self._group_in_progress,
-                        self._ungroup_in_progress))
-
-    def on_node_removed(self, *args, **kwargs):
-        logging.debug('[on_node_removed] args=%s kwargs=%s' % (args, kwargs))
-
-    def _on_ungrouped(self, root_paths):
-        self._reindex()
-        self.on_ungrouped(root_paths)
-
-    def _on_grouped(self, parent_path, children_paths):
-        self._reindex()
-        self.on_grouped(parent_path, children_paths)
-
-    def _on_node_inserted(self, *args, **kwargs):
-        self._reindex()
-        if not self._ungroup_in_progress and not self._group_in_progress:
-            self.on_node_inserted(*args, **kwargs)
-
-    def _on_node_appended(self, *args, **kwargs):
-        self._reindex()
-        if not self._ungroup_in_progress and not self._group_in_progress:
-            self.on_node_appended(*args, **kwargs)
-
-    def _on_node_removed(self, *args, **kwargs):
-        self._reindex()
-        if not self._ungroup_in_progress and not self._group_in_progress:
-            self.on_node_removed(*args, **kwargs)
-
     def _reindex(self):
+        '''
+        The `Node` instances in the tree can be referenced using two different indexes:
+            1) path tuple
+            2) linear `Node` index (0-index if tree is flattened)
+
+        This method refreshes the two indexes, along with two mappings:
+            1) from each `Node` instance to the corresponding path tuple
+            1) from each `Node` instance to the corresponding linear index
+        '''
         self._reset_index()
         for index, node_path, node in [i for i in self._iter_children()]:
             self._node_to_path_map[node] = node_path
@@ -166,29 +195,93 @@ class NodeTree(object):
     def __len__(self):
         return len(self._id_to_path_map)
 
+    def on_ungrouped(self, root_paths):
+        logging.debug('[on_ungrouped] root_paths=%s' % root_paths)
+
+    def on_grouped(self, parent_path, children_paths):
+        logging.debug('[on_grouped] parent_path=%s children_paths=%s' % (
+                parent_path, children_paths))
+
+    def on_node_inserted(self, *args, **kwargs):
+        logging.debug('[on_node_inserted] args=%s kwargs=%s' % (args, kwargs))
+
+    def on_node_appended(self, *args, **kwargs):
+        logging.debug('[on_node_appended] args=%s kwargs=%s group=%s ungroup=%s' % (
+                args, kwargs, self._group_in_progress,
+                        self._ungroup_in_progress))
+
+    def on_node_removed(self, *args, **kwargs):
+        logging.debug('[on_node_removed] args=%s kwargs=%s' % (args, kwargs))
+
+    def _on_ungrouped(self, root_paths):
+        self._reindex()
+        self.on_ungrouped(root_paths)
+
+    def _on_grouped(self, parent_path, children_paths):
+        self._reindex()
+        self.on_grouped(parent_path, children_paths)
+
+    def _on_node_inserted(self, *args, **kwargs):
+        self._reindex()
+        if not self._ungroup_in_progress and not self._group_in_progress:
+            self.on_node_inserted(*args, **kwargs)
+
+    def _on_node_appended(self, *args, **kwargs):
+        self._reindex()
+        if not self._ungroup_in_progress and not self._group_in_progress:
+            self.on_node_appended(*args, **kwargs)
+
+    def _on_node_removed(self, *args, **kwargs):
+        self._reindex()
+        if not self._ungroup_in_progress and not self._group_in_progress:
+            self.on_node_removed(*args, **kwargs)
+
     def append_node(self, node):
+        '''
+        Append `node` to the list of top-level `Node` instances in the tree.
+        '''
         if self.root.children:
             sibling_path = (self._node_to_path_map[self[-1]][0], )
             self.insert_after(self[sibling_path], node)
         else:
             self.append_child(self.root, node)
+        return node
 
     def append_child(self, parent, node):
-        parent.append_node(node)
+        '''
+        Append `node` to the children of `parent`, where `node` is either a
+        `Node` instance or a `NodeTree` instance with a single top-level
+        `Node`.
+        '''
+        node = parent.append_node(node)
         self._on_node_appended(node)
 
     def _insert_relative(self, insert_func, sibling, node):
+        '''
+        Common code for inserting `node` either before or after `sibling`.
+        '''
         position = insert_func(sibling, node)
         sibling_path = self._node_to_path_map[sibling]
         self._on_node_inserted(sibling_path[:-1] + (position, ), node)
 
     def insert_before(self, sibling, node):
+        '''
+        Insert `node` before `sibling` `Node`, on same level.
+        '''
         self._insert_relative(Node.insert_before, sibling, node)
 
     def insert_after(self, sibling, node):
+        '''
+        Insert `node` after `sibling` `Node`, on same level.
+        '''
         self._insert_relative(Node.insert_after, sibling, node)
 
     def insert(self, node_path, node):
+        '''
+        Insert the provided `Node` before the provided `node_path` tuple.  If
+        there is currently no `Node` at the path `node_path`, the `Node` will be
+        inserted at the last position at the deepest level of the `node_path`.
+        '''
         try:
             sibling = self[node_path]
             self.insert_before(sibling, node)
@@ -209,6 +302,12 @@ class NodeTree(object):
                 self.append_child(parent, node)
 
     def remove(self, node):
+        '''
+        Remove `node` (along with all descendents) from tree.
+
+        Return `NodeTree` instance with a single top-level `Node`, containing
+        the full removed sub-tree.
+        '''
         node_path = self._node_to_path_map[node]
         node.parent.remove_node(node)
         node_tree = node.get_tree()
@@ -244,7 +343,7 @@ class Node(object):
         self.children = []
 
     def __str__(self):
-        return 'Node(item=%s)' % self.item
+        return 'Node(item=%s)' % (self.item, )
 
     def insert_before(self, node):
         '''
