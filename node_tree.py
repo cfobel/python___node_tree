@@ -565,13 +565,14 @@ class Node(object):
 
 _node_tree_dot_template_str = '''\
 digraph G {
+{{ extra }}
     rankdir="LR";
 {{ edges }}
 }
 '''
 
 
-def node_tree_to_dot(node_tree):
+def node_tree_to_dot(node_tree, extra_dot=''):
     template = Template(_node_tree_dot_template_str)
     with closing(StringIO.StringIO()) as sio:
         for node_path, node in node_tree:
@@ -585,7 +586,7 @@ def node_tree_to_dot(node_tree):
                                 node.parent], node_tree._node_to_id_map[node])
                 except KeyError:
                     print node.item, node.parent.item
-        return template.render(edges=sio.getvalue())
+        return template.render(edges=sio.getvalue(), extra=extra_dot)
 
 
 if __name__ == '__main__':
@@ -615,7 +616,10 @@ if __name__ == '__main__':
             count += 1
     node_tree.append_node(Node(count))
     count += 1
-    path('00_original.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('00_original.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="original";
+        '''))
     tree_count = 0
     print '''
 ************************************************************************
@@ -627,7 +631,10 @@ if __name__ == '__main__':
     tree_count += 1
     sub_tree = node_tree[1].get_tree()
     node_tree.insert_after(node_tree[0], copy.deepcopy(sub_tree)[0])
-    path('01_insert_1_after_0.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('01_insert_1_after_0.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="01_insert_1_after_0";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Insert 1 after 0
@@ -637,7 +644,10 @@ if __name__ == '__main__':
     tree_count += 1
     sub_tree = node_tree[15].get_tree()
     node_tree.insert_after(node_tree[14], sub_tree[0])
-    path('02_insert_15_after_14.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('02_insert_15_after_14.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="02_insert_15_after_14";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Insert 15 after 14
@@ -646,7 +656,10 @@ if __name__ == '__main__':
 
     tree_count += 1
     node_tree.remove(node_tree[12])
-    path('03_remove_12.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('03_remove_12.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="03_remove_12";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Remove 12
@@ -657,7 +670,10 @@ if __name__ == '__main__':
     sibling = node_tree[9]
     sub_tree = node_tree.remove(node_tree[5])
     node_tree.insert_after(sibling, sub_tree[0])
-    path('04_remove_5_insert_after_9.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('04_remove_5_insert_after_9.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="04_remove_5_insert_after_9";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Remove 5 insert after 9
@@ -667,7 +683,10 @@ if __name__ == '__main__':
     tree_count += 1
     other_tree = NodeTree([node.copy() for node in [node_tree[1], node_tree[5]]])
     node_tree.insert_before(node_tree[0], other_tree[0])
-    path('05_copy_1_5_insert_before_0.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('05_copy_1_5_insert_before_0.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="05_copy_1_5_insert_before_0";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Copy 1 5 insert before 0
@@ -676,7 +695,10 @@ if __name__ == '__main__':
 
     tree_count += 1
     node_tree.group([node_tree[i] for i in [0, 4, 5]])
-    path('06_group_0_4_5.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('06_group_0_4_5.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="06_group_0_4_5";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Group 0 4 5
@@ -685,7 +707,10 @@ if __name__ == '__main__':
 
     tree_count += 1
     node_tree.ungroup([node_tree[i] for i in [0]])
-    path('07_ungroup_0.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('07_ungroup_0.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="07_ungroup_0";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Ungroup 0
@@ -694,7 +719,10 @@ if __name__ == '__main__':
 
     tree_count += 1
     node_tree.group([node_tree[i] for i in [0, 1, 2, 4, 5]])
-    path('08_group_0_1_2_4_5.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('08_group_0_1_2_4_5.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="08_group_0_1_2_4_5";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Group 0 1 2 4 5
@@ -703,7 +731,10 @@ if __name__ == '__main__':
 
     tree_count += 1
     node_tree.ungroup([node_tree[i] for i in [0, 16]])
-    path('09_ungroup_0_16.dot').write_bytes(node_tree_to_dot(node_tree))
+    path('09_ungroup_0_16.dot').write_bytes(node_tree_to_dot(node_tree, '''
+        labelloc="t";
+        label="09_ungroup_0_16";
+        '''))
     print '''
 ************************************************************************
 [%2d]   Ungroup 0 16
