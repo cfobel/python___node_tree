@@ -44,8 +44,9 @@ class NodeTree(object):
 
         insert(node_path, node)
             Insert the provided `Node` before the provided `node_path` tuple.
-            If there is currently no node at the path `node_path`, the `Node` will be inserted at the last position at the
-            deepest level of the `node_path`.
+            If there is currently no node at the path `node_path`, the `Node`
+            will be inserted at the last position at the deepest level of the
+            `node_path`.
 
 
     Nodes can be grouped and ungrouped using the methods with corresponding names.
